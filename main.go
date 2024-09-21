@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"net"
+	"strings"
 )
 
 func main() {
@@ -41,16 +43,46 @@ func handleConnection(conn net.Conn) {
 		return
 	}
 
-	// Read data from the client
-	buffer := make([]byte, 1024)
+	reader := bufio.NewReader(conn)
+
 	for {
-		n, err := conn.Read(buffer)
+		line, err := reader.ReadString('\n')
+
 		if err != nil {
-			log.Printf("Error reading from connection: %v", err)
+			log.Printf("Error reading from the connection: %v", err)
 			return
 		}
 
-		// Echo the data back to the client for now (just for testing)
-		conn.Write(buffer[:n])
+		if readLine(conn, line) {
+			break
+		}
 	}
+
+}
+
+func readLine(conn net.Conn, line string) bool {
+	line = strings.TrimSpace(line)
+	log.Printf("Received %s", line)
+
+	if strings.HasPrefix(strings.ToUpper(line), "HELO") {
+		returnHello(conn, line)
+	} else if strings.HasPrefix(strings.ToUpper(line), "QUIT") {
+		returnQuit(conn, line)
+		// Returning true signals that we should close the connection
+		return true
+	} else {
+		conn.Write([]byte("500 Unrecognized command\r\n"))
+	}
+	return false
+}
+
+func returnHello(conn net.Conn, line string) {
+	domain := strings.TrimSpace(line[4:])
+	response := fmt.Sprintf("250 Hello %s, pleased to meet you\r\n", domain)
+	conn.Write([]byte(response))
+}
+
+func returnQuit(conn net.Conn, line string) {
+	conn.Write([]byte("221 Bye\r\n"))
+	log.Printf("Connection closed by client")
 }
